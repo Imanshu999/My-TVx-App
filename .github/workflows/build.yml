@@ -19,14 +19,16 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Build APK with Gradle
+    - name: Generate Gradle Wrapper & Build APK
       run: |
-        echo "Installing build tools..."
-        sudo apt-get update
-        sudo apt-get install -y gradle
+        echo "Generating gradle wrapper..."
+        gradle wrapper
         
-        echo "Starting APK compilation..."
-        gradle assembleDebug --stacktrace
+        echo "Making gradlew executable..."
+        chmod +x gradlew
+        
+        echo "Building APK using generated gradlew..."
+        ./gradlew assembleDebug --stacktrace
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
