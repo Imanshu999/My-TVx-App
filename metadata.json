@@ -1,0 +1,6 @@
+{
+  "name": "My TVx",
+  "description": "Live TV streaming application with categorized IPTV channels, HLS video player, and real-time search.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
