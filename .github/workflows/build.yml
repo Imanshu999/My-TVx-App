@@ -19,12 +19,12 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Install Gradle and Build APK
+    - name: Install Gradle and Build with Stacktrace
       run: |
         sudo apt-get update
         sudo apt-get install -y gradle
-        echo "Starting Gradle build..."
-        gradle assembleDebug
+        echo "Running build with full error details..."
+        gradle assembleDebug --stacktrace
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
@@ -32,4 +32,4 @@ jobs:
         name: LiveTV-Debug-APK
         path: |
           app/build/outputs/apk/debug/app-debug.apk
-          **/app-debug.apk
+          **/app-dug.apk
