@@ -19,20 +19,12 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-
-    - name: Build Debug APK using Gradle
+    - name: Install Gradle and Build APK
       run: |
-        # Agar root mein gradlew nahi hai, toh yeh direct gradle build command chalayega
-        if [ -f "./gradlew" ]; then
-          chmod +x gradlew
-          ./gradlew assembleDebug
-        else
-          # Fallback: Agar gradlew nahi hai toh gradle install karke build karega
-          sudo apt-get update && sudo apt-get install -y gradle
-          gradle assembleDebug
-        fi
+        sudo apt-get update
+        sudo apt-get install -y gradle
+        echo "Starting Gradle build..."
+        gradle assembleDebug
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
