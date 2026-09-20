@@ -19,14 +19,25 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
 
-    - name: Build Debug APK with Gradle
-      run: ./gradlew assembleDebug
+    - name: Build Debug APK using Gradle
+      run: |
+        # Agar root mein gradlew nahi hai, toh yeh direct gradle build command chalayega
+        if [ -f "./gradlew" ]; then
+          chmod +x gradlew
+          ./gradlew assembleDebug
+        else
+          # Fallback: Agar gradlew nahi hai toh gradle install karke build karega
+          sudo apt-get update && sudo apt-get install -y gradle
+          gradle assembleDebug
+        fi
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: LiveTV-Debug-APK
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: |
+          app/build/outputs/apk/debug/app-debug.apk
+          **/app-debug.apk
