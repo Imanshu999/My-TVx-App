@@ -31,5 +31,15 @@ class MainActivity : ComponentActivity() {
       }
     }
   }
+
+  override fun onPause() {
+    super.onPause()
+    viewModel.playerManager.onAppBackgrounded()
+  }
+
+  override fun onResume() {
+    super.onResume()
+    viewModel.playerManager.onAppForegrounded()
+  }
 }
 

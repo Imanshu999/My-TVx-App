@@ -127,8 +127,8 @@ fun TvAppScreen(
         } else null
 
         if (uiState.isFullscreen && activity != null && window != null) {
-            // 1. Fullscreen & Auto-Rotate: Lock screen orientation to landscape
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            // 1. Fullscreen: Set orientation to landscape
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
 
             // 2. Hide system status bar & navigation bar for true edge-to-edge fullscreen
             insetsController?.systemBarsBehavior =
@@ -154,10 +154,7 @@ fun TvAppScreen(
     Scaffold(
         modifier = modifier
             .fillMaxSize()
-            .background(if (uiState.isFullscreen) Color.Black else DarkBackground)
-            .then(
-                if (uiState.isFullscreen) Modifier else Modifier.statusBarsPadding().navigationBarsPadding()
-            ),
+            .background(if (uiState.isFullscreen) Color.Black else DarkBackground),
         containerColor = if (uiState.isFullscreen) Color.Black else DarkBackground
     ) { innerPadding ->
         Column(
@@ -205,6 +202,8 @@ fun TvAppScreen(
                     currentChannel = uiState.currentChannel,
                     isFullscreen = uiState.isFullscreen,
                     onToggleFullscreen = { viewModel.setFullscreen(!uiState.isFullscreen) },
+                    onNextChannel = { viewModel.selectNextChannel() },
+                    onPreviousChannel = { viewModel.selectPreviousChannel() },
                     modifier = Modifier.fillMaxSize()
                 )
             }

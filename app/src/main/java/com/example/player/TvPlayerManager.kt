@@ -11,6 +11,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import kotlinx.coroutines.CoroutineScope
@@ -45,10 +46,39 @@ class TvPlayerManager(context: Context) {
     private val mediaSourceFactory = DefaultMediaSourceFactory(appContext)
         .setDataSourceFactory(httpDataSourceFactory)
 
+    private val isEmulator: Boolean = android.os.Build.FINGERPRINT.startsWith("generic") ||
+        android.os.Build.FINGERPRINT.startsWith("unknown") ||
+        android.os.Build.MODEL.contains("google_sdk") ||
+        android.os.Build.MODEL.contains("Emulator") ||
+        android.os.Build.MODEL.contains("Android SDK built for") ||
+        android.os.Build.HARDWARE.contains("goldfish") ||
+        android.os.Build.HARDWARE.contains("ranchu") ||
+        android.os.Build.PRODUCT.contains("sdk")
+
+    // Configure decoder selector: prioritize OpenMAX (OMX.google.*) decoders when available
+    // to bypass Codec2 (CCodec.cpp) system resource interface queries, followed by standard
+    // software decoders (c2.android.*)
+    private val customMediaCodecSelector = MediaCodecSelector { mimeType, requiresSecure, requiresTunneling ->
+        val decoders = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, requiresSecure, requiresTunneling)
+        decoders.sortedWith(compareBy(
+            { decoder ->
+                when {
+                    decoder.name.startsWith("OMX.google.") -> 0
+                    decoder.name.startsWith("OMX.") -> 1
+                    decoder.name.startsWith("c2.android.") -> 2
+                    decoder.softwareOnly -> 3
+                    else -> 4
+                }
+            },
+            { it.name }
+        ))
+    }
+
     // Enable decoder fallback to gracefully handle missing/exhausted hardware decoders on emulators and various devices
     private val renderersFactory = DefaultRenderersFactory(appContext).apply {
         setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
         setEnableDecoderFallback(true)
+        setMediaCodecSelector(customMediaCodecSelector)
     }
 
     private val audioAttributes = AudioAttributes.Builder()
@@ -59,7 +89,7 @@ class TvPlayerManager(context: Context) {
     val player: ExoPlayer = ExoPlayer.Builder(appContext, renderersFactory)
         .setMediaSourceFactory(mediaSourceFactory)
         .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
-        .setWakeMode(C.WAKE_MODE_NETWORK)
+        .setWakeMode(C.WAKE_MODE_NONE)
         .build()
 
     private val _playerState = MutableStateFlow(
@@ -259,6 +289,19 @@ class TvPlayerManager(context: Context) {
             } else {
                 player.play()
             }
+        }
+    }
+
+    private var wasPlayingBeforeBackground = false
+
+    fun onAppBackgrounded() {
+        wasPlayingBeforeBackground = player.isPlaying
+        player.pause()
+    }
+
+    fun onAppForegrounded() {
+        if (wasPlayingBeforeBackground && _playerState.value.errorMessage == null) {
+            player.play()
         }
     }
 

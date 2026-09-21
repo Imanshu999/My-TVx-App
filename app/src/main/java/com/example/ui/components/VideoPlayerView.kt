@@ -1,7 +1,9 @@
 package com.example.ui.components
 
+import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import com.example.R
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -125,16 +127,14 @@ fun VideoPlayerView(
         // ExoPlayer View
         AndroidView(
             factory = { ctx ->
-                PlayerView(ctx).apply {
+                val playerView = LayoutInflater.from(ctx).inflate(R.layout.view_tv_player, null, false) as PlayerView
+                playerView.apply {
                     player = playerManager.player
-                    useController = false
-                    setBackgroundColor(android.graphics.Color.BLACK)
+                    resizeMode = playerState.resizeMode
                     layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                    resizeMode = playerState.resizeMode
                 }
             },
             update = { playerView ->
