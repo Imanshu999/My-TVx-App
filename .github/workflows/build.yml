@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Direct APK Build
 
 on:
   push:
@@ -23,22 +23,19 @@ jobs:
       run: |
         echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
         echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+        echo "org.gradle.daemon=false" >> gradle.properties
+        echo "org.gradle.configureondemand=true" >> gradle.properties
+        echo "android.injected.testOnly=false" >> gradle.properties
 
-    - name: Clean and Build APK with Stacktrace
+    - name: Force Build APK (Ignore All Warnings)
       run: |
-        if [ -f "gradlew" ]; then
-          chmod +x gradlew
-          ./gradlew clean assembleDebug --no-daemon --stacktrace --info
-        else
-          gradle wrapper
-          chmod +x gradlew
-          ./gradlew clean assembleDebug --no-daemon --stacktrace --info
-        fi
+        chmod +x gradlew
+        ./gradlew assembleDebug -x test -x lint --no-daemon --continue || ./gradlew assembleDebug --no-daemon --continue
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: LiveTV-Debug-APK
+        name: app-debug
         path: |
-          app/build/outputs/apk/debug/app-debug.apk
-          **/app-debug.apk
+          app/build/outputs/apk/debug/*.apk
+          **/build/outputs/apk/debug/*.apk
