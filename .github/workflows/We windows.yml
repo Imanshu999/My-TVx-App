@@ -1,0 +1,91 @@
+name: Build Windows Website
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check project type
+        shell: pwsh
+        run: |
+          Write-Host "Project files:"
+          Get-ChildItem -Force
+
+          if (Test-Path "package.json") {
+            Write-Host "Node.js website detected."
+            "NODE_PROJECT=true" >> $env:GITHUB_ENV
+          } else {
+            Write-Host "No package.json found."
+            "NODE_PROJECT=false" >> $env:GITHUB_ENV
+          }
+
+      - name: Install dependencies
+        if: env.NODE_PROJECT == 'true'
+        shell: pwsh
+        run: |
+          if (Test-Path "package-lock.json") {
+            npm ci --legacy-peer-deps
+          }
+          elseif (Test-Path "npm-shrinkwrap.json") {
+            npm ci --legacy-peer-deps
+          }
+          elseif (Test-Path "yarn.lock") {
+            corepack enable
+            yarn install --frozen-lockfile
+          }
+          else {
+            npm install --no-package-lock --legacy-peer-deps
+          }
+
+      - name: Build website
+        if: env.NODE_PROJECT == 'true'
+        shell: pwsh
+        run: |
+          npm run build
+
+      - name: Prepare static website
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path website-build | Out-Null
+
+          if (Test-Path "dist") {
+            Copy-Item "dist\*" "website-build\" -Recurse -Force
+          }
+          elseif (Test-Path "build") {
+            Copy-Item "build\*" "website-build\" -Recurse -Force
+          }
+          else {
+            Write-Host "No dist/build folder found."
+            Write-Host "Uploading project files instead."
+            Get-ChildItem -Force |
+              Where-Object {
+                $_.Name -notin @(
+                  ".git",
+                  "node_modules",
+                  "website-build"
+                )
+              } |
+              Copy-Item -Destination "website-build\" -Recurse -Force
+          }
+
+      - name: Upload website artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-tv-windows-website
+          path: website-build
+          if-no-files-found: error
