@@ -1,0 +1,119 @@
+name: Windows Desktop Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Check Gradle project
+        shell: powershell
+        run: |
+          if (!(Test-Path ".\gradlew.bat")) {
+            Write-Error "Gradle wrapper not found."
+            exit 1
+          }
+
+          Write-Host "Gradle project detected."
+
+      - name: Inspect project
+        shell: powershell
+        run: |
+          Write-Host "Searching for Kotlin/Compose configuration..."
+
+          Get-ChildItem -Recurse -Include `
+            "*.gradle.kts",
+            "*.gradle",
+            "*.kt" |
+            Select-Object -ExpandProperty FullName
+
+      - name: Check for Windows target
+        shell: powershell
+        run: |
+          $files = Get-ChildItem -Recurse -Include "*.gradle.kts","*.gradle"
+
+          $text = ($files | ForEach-Object {
+            Get-Content $_.FullName -Raw
+          }) -join "`n"
+
+          if (
+            $text -match "mingwX64" -or
+            $text -match "compose.desktop" -or
+            $text -match "compose.desktop.application" -or
+            $text -match "jvmToolchain"
+          ) {
+            Write-Host "Windows/Desktop configuration detected."
+          }
+          else {
+            Write-Host ""
+            Write-Host "=============================================="
+            Write-Host "ANDROID-ONLY PROJECT DETECTED"
+            Write-Host "=============================================="
+            Write-Host ""
+            Write-Host "A Windows target is not currently configured."
+            Write-Host "The project must be migrated to"
+            Write-Host "Compose Multiplatform/Desktop before"
+            Write-Host "a Windows EXE/MSI can be produced."
+            Write-Host ""
+          }
+
+      - name: Build Windows/Desktop
+        shell: powershell
+        run: |
+          .\gradlew.bat build --no-daemon --stacktrace
+
+      - name: Try Windows distribution
+        shell: powershell
+        continue-on-error: true
+        run: |
+          .\gradlew.bat `
+            packageReleaseExe `
+            packageReleaseMsi `
+            --no-daemon `
+            --stacktrace
+
+      - name: Find Windows applications
+        shell: powershell
+        run: |
+          Write-Host "Searching for EXE/MSI files..."
+
+          $files = Get-ChildItem `
+            -Recurse `
+            -Include "*.exe","*.msi" `
+            -ErrorAction SilentlyContinue
+
+          if ($files.Count -eq 0) {
+            Write-Host "No EXE/MSI was generated."
+            exit 1
+          }
+
+          $files | ForEach-Object {
+            Write-Host $_.FullName
+          }
+
+      - name: Upload Windows application
+        uses: actions/upload-artifact@v4
+        with:
+          name: Live-TV-Windows
+          path: |
+            **/*.exe
+            **/*.msi
+          if-no-files-found: error
