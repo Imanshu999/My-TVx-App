@@ -1,38 +1,48 @@
-name: Build Web Assets for iOS / Production
+name: Android Build
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 jobs:
-  build-web:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
 
-    - name: Install Dependencies
-      run: npm install
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-    - name: Build Production Bundle
-      run: npm run build
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
 
-    - name: Upload Build Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ios-ready-dist-files
-        path: |
-          dist/
-          build/
-          .next/
-          out/
-        if-no-files-found: ignore
-        
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK files
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-tv-apk
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
