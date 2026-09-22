@@ -22,18 +22,29 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: '22'
 
       - name: Install dependencies
         shell: bash
         run: |
+          set -e
+
           if [ -f package-lock.json ]; then
+            echo "package-lock.json found"
             npm ci --legacy-peer-deps
+
+          elif [ -f npm-shrinkwrap.json ]; then
+            echo "npm-shrinkwrap.json found"
+            npm ci --legacy-peer-deps
+
           elif [ -f yarn.lock ]; then
+            echo "yarn.lock found"
             corepack enable
-            yarn install --immutable || yarn install --frozen-lockfile
+            yarn install --frozen-lockfile
+
           else
+            echo "No dependency lock file found"
+            echo "Installing without package-lock.json"
             npm install --no-package-lock --legacy-peer-deps
           fi
 
@@ -41,47 +52,112 @@ jobs:
         run: npm run build
 
       - name: Install CocoaPods
-        if: hashFiles('ios/Podfile') != ''
+        if: ${{ hashFiles('ios/Podfile') != '' }}
+        shell: bash
         run: |
           sudo gem install cocoapods
           cd ios
           pod install --repo-update
 
-      - name: Build iOS Simulator app
-        if: hashFiles('ios/*.xcworkspace') != '' || hashFiles('ios/*.xcodeproj') != ''
+      - name: Detect iOS project
+        id: ios_project
         shell: bash
         run: |
-          cd ios
+          set -e
 
-          if ls *.xcworkspace >/dev/null 2>&1; then
-            WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -print -quit)
+          if ls ios/*.xcworkspace >/dev/null 2>&1; then
+            echo "type=workspace" >> "$GITHUB_OUTPUT"
+            echo "file=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)" >> "$GITHUB_OUTPUT"
+
+          elif ls ios/*.xcodeproj >/dev/null 2>&1; then
+            echo "type=project" >> "$GITHUB_OUTPUT"
+            echo "file=$(find ios -maxdepth 1 -name '*.xcodeproj' -print -quit)" >> "$GITHUB_OUTPUT"
+
+          else
+            echo "No iOS Xcode project found."
+            exit 1
+          fi
+
+      - name: Find iOS scheme
+        id: scheme
+        shell: bash
+        run: |
+          set -e
+
+          FILE="${{ steps.ios_project.outputs.file }}"
+
+          if [ "${{ steps.ios_project.outputs.type }}" = "workspace" ]; then
+            SCHEME=$(xcodebuild -list -workspace "$FILE" 2>/dev/null \
+              | awk '/Schemes:/ {flag=1; next} flag && NF {print; exit}' \
+              | xargs)
+          else
+            SCHEME=$(xcodebuild -list -project "$FILE" 2>/dev/null \
+              | awk '/Schemes:/ {flag=1; next} flag && NF {print; exit}' \
+              | xargs)
+          fi
+
+          if [ -z "$SCHEME" ]; then
+            echo "Could not detect an Xcode scheme."
+            exit 1
+          fi
+
+          echo "Using scheme: $SCHEME"
+          echo "name=$SCHEME" >> "$GITHUB_OUTPUT"
+
+      - name: Build iOS Simulator app
+        shell: bash
+        run: |
+          set -e
+
+          FILE="${{ steps.ios_project.outputs.file }}"
+          SCHEME="${{ steps.scheme.outputs.name }}"
+
+          mkdir -p ios/build
+
+          if [ "${{ steps.ios_project.outputs.type }}" = "workspace" ]; then
             xcodebuild \
-              -workspace "$WORKSPACE" \
-              -scheme "$(xcodebuild -list -workspace "$WORKSPACE" | sed -n '/Schemes:/,/^$/p' | sed -n '2p' | xargs)" \
+              -workspace "$FILE" \
+              -scheme "$SCHEME" \
               -sdk iphonesimulator \
               -configuration Release \
-              -derivedDataPath build \
+              -derivedDataPath ios/build \
               CODE_SIGNING_ALLOWED=NO \
               CODE_SIGNING_REQUIRED=NO \
               build
           else
-            PROJECT=$(find . -maxdepth 1 -name "*.xcodeproj" -print -quit)
             xcodebuild \
-              -project "$PROJECT" \
+              -project "$FILE" \
+              -scheme "$SCHEME" \
               -sdk iphonesimulator \
               -configuration Release \
-              -derivedDataPath build \
+              -derivedDataPath ios/build \
               CODE_SIGNING_ALLOWED=NO \
               CODE_SIGNING_REQUIRED=NO \
               build
           fi
 
+      - name: Package iOS Simulator app
+        shell: bash
+        run: |
+          set -e
+
+          APP_PATH=$(find ios/build/Build/Products -type d -name "*.app" -print -quit)
+
+          if [ -z "$APP_PATH" ]; then
+            echo "iOS .app file was not found."
+            exit 1
+          fi
+
+          echo "Found: $APP_PATH"
+
+          mkdir -p ios-artifact
+          ditto "$APP_PATH" "ios-artifact/LiveTV.app"
+
       - name: Upload iOS build
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build
+          name: live-tv-ios-build
           path: |
-            ios/build/
+            ios-artifact/
             dist/
-            build/
           if-no-files-found: warn
