@@ -1,4 +1,4 @@
-name: Android Build
+name: iOS Build
 
 on:
   push:
@@ -12,37 +12,76 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-ios:
+    runs-on: macos-latest
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
+          node-version: 20
+          cache: npm
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --legacy-peer-deps
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            yarn install --immutable || yarn install --frozen-lockfile
+          else
+            npm install --no-package-lock --legacy-peer-deps
+          fi
 
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
+      - name: Build web production bundle
+        run: npm run build
 
-      - name: Build Release APK
-        run: ./gradlew assembleRelease --no-daemon
+      - name: Install CocoaPods
+        if: hashFiles('ios/Podfile') != ''
+        run: |
+          sudo gem install cocoapods
+          cd ios
+          pod install --repo-update
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Build iOS Simulator app
+        if: hashFiles('ios/*.xcworkspace') != '' || hashFiles('ios/*.xcodeproj') != ''
+        shell: bash
+        run: |
+          cd ios
 
-      - name: Upload APK files
+          if ls *.xcworkspace >/dev/null 2>&1; then
+            WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -print -quit)
+            xcodebuild \
+              -workspace "$WORKSPACE" \
+              -scheme "$(xcodebuild -list -workspace "$WORKSPACE" | sed -n '/Schemes:/,/^$/p' | sed -n '2p' | xargs)" \
+              -sdk iphonesimulator \
+              -configuration Release \
+              -derivedDataPath build \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              build
+          else
+            PROJECT=$(find . -maxdepth 1 -name "*.xcodeproj" -print -quit)
+            xcodebuild \
+              -project "$PROJECT" \
+              -sdk iphonesimulator \
+              -configuration Release \
+              -derivedDataPath build \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              build
+          fi
+
+      - name: Upload iOS build
         uses: actions/upload-artifact@v4
         with:
-          name: live-tv-apk
+          name: ios-build
           path: |
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+            ios/build/
+            dist/
+            build/
+          if-no-files-found: warn
